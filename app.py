@@ -64,7 +64,7 @@ with st.sidebar:
     
     server_api_key = os.getenv("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY")
     if server_api_key:
-        st.success("✅ API Key Active")
+        # st.success("✅ API Key Active")
         api_key = server_api_key
     else:
         api_key = st.text_input("Groq API Key:", type="password")
