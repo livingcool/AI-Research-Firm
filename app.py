@@ -110,7 +110,7 @@ if not st.session_state.user:
             user = sign_in(email, password)
             if user:
                 st.session_state.user = user
-                st.session_state.role = get_user_role(user.user.id)
+                st.session_state.role = get_user_role(user.user.id, user.session.access_token)
                 st.success(f"Logged in as {st.session_state.role.upper()}!")
                 st.rerun()
 
@@ -191,12 +191,11 @@ else:
             with tab2:
                 from research_tools import search_arxiv, select_best_paper, fetch_and_parse_rich_arxiv
                 topic = st.text_input("Enter Research Topic:")
+                
                 if st.button("Start Autonomous Research"):
                     with st.spinner("🔍 Searching & Analyzing..."):
                         papers = search_arxiv(topic)
                         best_paper = select_best_paper(topic, papers, llm)
-                        
-                        st.markdown(f"### 🏆 Selected: {best_paper['title']}")
                         
                         md_text, image_dir = fetch_and_parse_rich_arxiv(best_paper['id'])
                         
@@ -215,48 +214,68 @@ else:
                             usage = response.response_metadata.get('token_usage', {})
                             log_usage(st.session_state.user.user.id, "llama-3.3-70b", usage.get('prompt_tokens', 0), usage.get('completion_tokens', 0), access_token)
 
-                            st.markdown('<div class="card">', unsafe_allow_html=True)
-                            st.markdown(presentation)
-                            st.markdown('</div>', unsafe_allow_html=True)
-                            
                             # Data Viz for Academic
-                            from viz_tools import extract_data_for_chart, create_chart
+                            from viz_tools import extract_data_for_chart
                             with st.spinner("📊 analyzing for charts..."):
                                 chart_data = extract_data_for_chart(presentation, llm, st.session_state.user.user.id, access_token)
-                                fig = create_chart(chart_data)
-                                if fig:
-                                    st.plotly_chart(fig, use_container_width=True)
 
                             # Save to DB
                             from db_client import save_report
                             save_report(topic, "Academic", presentation, st.session_state.user.user.id, access_token)
+                            
+                            # Build Brain
+                            from rag_engine import build_vector_store
+                            st.session_state.vectorstore = build_vector_store(md_text)
 
-                            # Export for Academic
-                            from report_generator import generate_pdf, generate_docx
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                pdf_path = generate_pdf(presentation)
-                                with open(pdf_path, "rb") as f:
-                                    st.download_button("📥 Download PDF", f, file_name=f"{topic}_academic.pdf")
-                            with col2:
-                                docx_path = generate_docx(presentation)
-                                with open(docx_path, "rb") as f:
-                                    st.download_button("📝 Download Word", f, file_name=f"{topic}_academic.docx")
+                            # SAVE STATE
+                            st.session_state.current_report = {
+                                "mode": "Academic",
+                                "topic": topic,
+                                "title": best_paper['title'],
+                                "content": presentation,
+                                "chart_data": chart_data,
+                                "image_dir": image_dir
+                            }
 
-                        # Visuals
-                        st.subheader("📊 Extracted Visuals")
-                        if os.path.exists(image_dir):
-                            images = [f for f in os.listdir(image_dir) if f.endswith(".png")]
-                            if images:
-                                cols = st.columns(3)
-                                for i, img_file in enumerate(images):
-                                    with cols[i % 3]:
-                                        st.image(os.path.join(image_dir, img_file), caption=img_file, use_container_width=True)
-                        
-                        # Build Brain
-                        from rag_engine import build_vector_store
-                        st.session_state.vectorstore = build_vector_store(md_text)
-                        st.success("Brain Built! Ready for Q&A.")
+                # DISPLAY STATE (if exists and matches mode)
+                if st.session_state.get("current_report") and st.session_state.current_report["mode"] == "Academic":
+                    report = st.session_state.current_report
+                    
+                    st.markdown(f"### 🏆 Selected: {report['title']}")
+                    
+                    st.markdown('<div class="card">', unsafe_allow_html=True)
+                    st.markdown(report['content'])
+                    st.markdown('</div>', unsafe_allow_html=True)
+                    
+                    if report['chart_data']:
+                        from viz_tools import create_chart
+                        fig = create_chart(report['chart_data'])
+                        if fig:
+                            st.plotly_chart(fig, use_container_width=True)
+
+                    # Export for Academic
+                    from report_generator import generate_pdf, generate_docx
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        pdf_path = generate_pdf(report['content'])
+                        with open(pdf_path, "rb") as f:
+                            st.download_button("📥 Download PDF", f, file_name=f"{report['topic']}_academic.pdf")
+                    with col2:
+                        docx_path = generate_docx(report['content'])
+                        with open(docx_path, "rb") as f:
+                            st.download_button("📝 Download Word", f, file_name=f"{report['topic']}_academic.docx")
+
+                    # Visuals
+                    st.subheader("📊 Extracted Visuals")
+                    if os.path.exists(report['image_dir']):
+                        images = [f for f in os.listdir(report['image_dir']) if f.endswith(".png")]
+                        if images:
+                            cols = st.columns(3)
+                            for i, img_file in enumerate(images):
+                                with cols[i % 3]:
+                                    st.image(os.path.join(report['image_dir'], img_file), caption=img_file, use_container_width=True)
+                    
+                    st.success("Brain Built! Ready for Q&A.")
 
         # === MODE 2: MARKET INTELLIGENCE ===
         elif mode == "Market Intelligence (Web)":
@@ -271,44 +290,56 @@ else:
                     articles = search_market(topic)
                     if articles:
                         st.write(f"Found {len(articles)} relevant sources.")
-                        # Pass user_id for logging
-                        # Note: We need to update market_tools to accept access_token if we want logging to work there too.
-                        # For now, let's just pass user_id and assume we'll fix market_tools next.
-                        report = generate_market_report(topic, articles, llm, st.session_state.user.user.id) 
                         
-                        st.markdown('<div class="card">', unsafe_allow_html=True)
-                        st.markdown(report)
-                        st.markdown('</div>', unsafe_allow_html=True)
+                        report_content = generate_market_report(topic, articles, llm, st.session_state.user.user.id) 
                         
                         # Data Viz
                         with st.spinner("📊 Generating Charts..."):
-                            # Pass user_id for logging
-                            chart_data = extract_data_for_chart(report, llm, st.session_state.user.user.id, access_token)
-                            fig = create_chart(chart_data)
-                            if fig:
-                                st.plotly_chart(fig, use_container_width=True)
+                            chart_data = extract_data_for_chart(report_content, llm, st.session_state.user.user.id, access_token)
                         
                         # Save to DB
                         from db_client import save_report
-                        save_report(topic, "Market", report, st.session_state.user.user.id, access_token)
+                        save_report(topic, "Market", report_content, st.session_state.user.user.id, access_token)
                         
-                        # Export
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            pdf_path = generate_pdf(report)
-                            with open(pdf_path, "rb") as f:
-                                st.download_button("📥 Download PDF", f, file_name=f"{topic}_report.pdf")
-                        with col2:
-                            docx_path = generate_docx(report)
-                            with open(docx_path, "rb") as f:
-                                st.download_button("📝 Download Word", f, file_name=f"{topic}_report.docx")
-
                         # Enable Chat on this report
                         from rag_engine import build_vector_store
-                        st.session_state.vectorstore = build_vector_store(report)
-                        st.success("Context Loaded! Ask questions about the report.")
+                        st.session_state.vectorstore = build_vector_store(report_content)
+                        
+                        # SAVE STATE
+                        st.session_state.current_report = {
+                            "mode": "Market",
+                            "topic": topic,
+                            "content": report_content,
+                            "chart_data": chart_data
+                        }
                     else:
                         st.error("No articles found.")
+
+            # DISPLAY STATE (if exists and matches mode)
+            if st.session_state.get("current_report") and st.session_state.current_report["mode"] == "Market":
+                report = st.session_state.current_report
+                
+                st.markdown('<div class="card">', unsafe_allow_html=True)
+                st.markdown(report['content'])
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+                if report['chart_data']:
+                    fig = create_chart(report['chart_data'])
+                    if fig:
+                        st.plotly_chart(fig, use_container_width=True)
+                
+                # Export
+                col1, col2 = st.columns(2)
+                with col1:
+                    pdf_path = generate_pdf(report['content'])
+                    with open(pdf_path, "rb") as f:
+                        st.download_button("📥 Download PDF", f, file_name=f"{report['topic']}_report.pdf")
+                with col2:
+                    docx_path = generate_docx(report['content'])
+                    with open(docx_path, "rb") as f:
+                        st.download_button("📝 Download Word", f, file_name=f"{report['topic']}_report.docx")
+
+                st.success("Context Loaded! Ask questions about the report.")
 
         # === MODE 3: HISTORY ===
         elif mode == "Research History":

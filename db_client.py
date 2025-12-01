@@ -54,11 +54,11 @@ def save_report(topic: str, report_type: str, content: str, user_id: str = None,
     except Exception as e:
         print(f"❌ Error saving to Supabase: {e}")
 
-def get_user_role(user_id: str):
+def get_user_role(user_id: str, access_token: str = None):
     """
     Fetches the user's role from the profiles table.
     """
-    supabase = get_supabase_client()
+    supabase = get_supabase_client(access_token)
     if not supabase: return "user"
     
     try:
