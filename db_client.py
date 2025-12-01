@@ -51,9 +51,23 @@ def save_report(topic: str, report_type: str, content: str, user_id: str = None)
     except Exception as e:
         print(f"❌ Error saving to Supabase: {e}")
 
-def get_history(user_id: str = None):
+def get_user_role(user_id: str):
     """
-    Fetches past reports from Supabase.
+    Fetches the user's role from the profiles table.
+    """
+    supabase = get_supabase_client()
+    if not supabase: return "user"
+    
+    try:
+        response = supabase.table("profiles").select("role").eq("id", user_id).single().execute()
+        return response.data.get("role", "user")
+    except Exception as e:
+        print(f"⚠️ Error fetching role: {e}")
+        return "user"
+
+def get_history(user_id: str = None, role: str = "user"):
+    """
+    Fetches past reports. Admins see all, Users see their own.
     """
     supabase = get_supabase_client()
     if not supabase:
@@ -61,7 +75,9 @@ def get_history(user_id: str = None):
     
     try:
         query = supabase.table("research_reports").select("*").order("created_at", desc=True)
-        if user_id:
+        
+        # If not admin, filter by user_id
+        if role != 'admin' and user_id:
             query = query.eq("user_id", user_id)
         
         response = query.execute()
@@ -87,3 +103,14 @@ def log_usage(user_id: str, model: str, input_tokens: int, output_tokens: int):
         print(f"📊 Usage logged: {input_tokens} in / {output_tokens} out")
     except Exception as e:
         print(f"❌ Error logging usage: {e}")
+
+def get_all_usage():
+    """
+    Fetches all usage logs for the admin dashboard.
+    """
+    supabase = get_supabase_client()
+    if not supabase: return []
+    try:
+        return supabase.table("usage_logs").select("*").order("created_at", desc=True).execute().data
+    except Exception:
+        return []

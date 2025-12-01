@@ -106,11 +106,12 @@ if not st.session_state.user:
         email = st.text_input("Email")
         password = st.text_input("Password", type="password")
         if st.button("Log In"):
-            from db_client import sign_in
+            from db_client import sign_in, get_user_role
             user = sign_in(email, password)
             if user:
                 st.session_state.user = user
-                st.success("Logged in!")
+                st.session_state.role = get_user_role(user.user.id)
+                st.success(f"Logged in as {st.session_state.role.upper()}!")
                 st.rerun()
             else:
                 st.error("Login failed. Check credentials.")
@@ -130,12 +131,42 @@ else:
     # Logged In View
     st.sidebar.markdown("---")
     st.sidebar.write(f"👤 **{st.session_state.user.user.email}**")
+    st.sidebar.caption(f"Role: {st.session_state.role.upper()}")
+    
     if st.sidebar.button("Log Out"):
         st.session_state.user = None
+        st.session_state.role = None
         st.rerun()
 
     if api_key:
         llm = ChatGroq(groq_api_key=api_key, model_name="llama-3.3-70b-versatile")
+
+        # === ADMIN DASHBOARD ===
+        if st.session_state.role == 'admin':
+            if st.sidebar.checkbox("Admin Dashboard", value=False):
+                st.subheader("🛡️ Admin Dashboard")
+                from db_client import get_all_usage, get_history
+                
+                # Stats
+                usage_data = get_all_usage()
+                total_tokens = sum([u['input_tokens'] + u['output_tokens'] for u in usage_data])
+                total_cost_est = (total_tokens / 1_000_000) * 0.50 # Rough estimate
+                
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Total API Calls", len(usage_data))
+                col2.metric("Total Tokens Processed", f"{total_tokens:,}")
+                col3.metric("Est. Cost (Groq)", f"${total_cost_est:.4f}")
+                
+                st.markdown("### 📋 Recent Activity Log")
+                st.dataframe(usage_data)
+                
+                st.markdown("### 🗄️ Global Research History")
+                all_reports = get_history(role='admin')
+                for item in all_reports:
+                    with st.expander(f"[{item['type']}] {item['topic']} (User: {item.get('user_id', 'Unknown')})"):
+                        st.markdown(item['content'])
+                
+                st.stop() # Stop execution here if in Admin Mode
 
         # === MODE 1: ACADEMIC RESEARCH ===
         if mode == "Academic Research (PDF/ArXiv)":
@@ -252,7 +283,8 @@ else:
         elif mode == "Research History":
             st.subheader("🗄️ Intelligence Archives")
             from db_client import get_history
-            history = get_history(st.session_state.user.user.id)
+            # Pass role to get_history
+            history = get_history(st.session_state.user.user.id, st.session_state.role)
             
             if history:
                 for item in history:
