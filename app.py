@@ -139,10 +139,11 @@ else:
         fb_rating = st.slider("Rating", 1, 5, 5)
         fb_comment = st.text_area("Comment")
         if st.button("Submit Feedback"):
-            if submit_feedback(st.session_state.user.user.id, fb_rating, fb_comment):
-                st.success("Thanks for your feedback!")
+            success, msg = submit_feedback(st.session_state.user.user.id, fb_rating, fb_comment)
+            if success:
+                st.success(msg)
             else:
-                st.error("Error submitting feedback.")
+                st.error(f"Error: {msg}")
 
     if st.sidebar.button("Log Out"):
         st.session_state.user = None

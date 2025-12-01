@@ -118,9 +118,10 @@ def get_all_usage():
 def submit_feedback(user_id: str, rating: int, comment: str):
     """
     Submits user feedback to Supabase.
+    Returns (success, message).
     """
     supabase = get_supabase_client()
-    if not supabase: return False
+    if not supabase: return False, "Supabase client not initialized"
     
     try:
         supabase.table("feedback").insert({
@@ -128,10 +129,10 @@ def submit_feedback(user_id: str, rating: int, comment: str):
             "rating": rating,
             "comment": comment
         }).execute()
-        return True
+        return True, "Feedback submitted successfully!"
     except Exception as e:
         print(f"❌ Error submitting feedback: {e}")
-        return False
+        return False, str(e)
 
 def get_all_feedback():
     """
