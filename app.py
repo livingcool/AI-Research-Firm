@@ -120,16 +120,23 @@ else:
     st.sidebar.write(f"👤 **{st.session_state.user.user.email}**")
     st.sidebar.caption(f"Role: {st.session_state.role.upper()}")
     
+    # Get Token (Early, for Feedback)
+    access_token = st.session_state.user.session.access_token if st.session_state.user and st.session_state.user.session else None
+
     # Feedback Section
     with st.sidebar.expander("💬 Give Feedback"):
         from db_client import submit_feedback
         fb_rating = st.slider("Rating", 1, 5, 5)
         fb_comment = st.text_area("Comment")
+        if st.button("Submit Feedback"):
+            success, msg = submit_feedback(st.session_state.user.user.id, fb_rating, fb_comment, access_token)
+            if success:
+                st.success(msg)
+            else:
+                st.error(f"Error: {msg}")
+
     if api_key:
         llm = ChatGroq(groq_api_key=api_key, model_name="llama-3.3-70b-versatile")
-        
-        # Get Token
-        access_token = st.session_state.user.session.access_token if st.session_state.user and st.session_state.user.session else None
 
         # === ADMIN DASHBOARD ===
         if st.session_state.role == 'admin':

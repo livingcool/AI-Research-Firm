@@ -30,11 +30,11 @@ def sign_in(email, password):
         print(f"❌ Sign In Error: {e}")
         return None
 
-def save_report(topic: str, report_type: str, content: str, user_id: str = None):
+def save_report(topic: str, report_type: str, content: str, user_id: str = None, access_token: str = None):
     """
     Saves the generated report to Supabase.
     """
-    supabase = get_supabase_client()
+    supabase = get_supabase_client(access_token)
     if not supabase:
         print("⚠️ Supabase credentials not found. Report not saved.")
         return
@@ -68,11 +68,11 @@ def get_user_role(user_id: str):
         print(f"⚠️ Error fetching role: {e}")
         return "user"
 
-def get_history(user_id: str = None, role: str = "user"):
+def get_history(user_id: str = None, role: str = "user", access_token: str = None):
     """
     Fetches past reports. Admins see all, Users see their own.
     """
-    supabase = get_supabase_client()
+    supabase = get_supabase_client(access_token)
     if not supabase:
         return []
     
@@ -89,11 +89,11 @@ def get_history(user_id: str = None, role: str = "user"):
         print(f"❌ Error fetching history: {e}")
         return []
 
-def log_usage(user_id: str, model: str, input_tokens: int, output_tokens: int):
+def log_usage(user_id: str, model: str, input_tokens: int, output_tokens: int, access_token: str = None):
     """
     Logs token usage to Supabase.
     """
-    supabase = get_supabase_client()
+    supabase = get_supabase_client(access_token)
     if not supabase: return
 
     try:
@@ -107,11 +107,11 @@ def log_usage(user_id: str, model: str, input_tokens: int, output_tokens: int):
     except Exception as e:
         print(f"❌ Error logging usage: {e}")
 
-def get_all_usage():
+def get_all_usage(access_token: str = None):
     """
     Fetches all usage logs for the admin dashboard.
     """
-    supabase = get_supabase_client()
+    supabase = get_supabase_client(access_token)
     if not supabase: return []
     try:
         return supabase.table("usage_logs").select("*").order("created_at", desc=True).execute().data
@@ -137,11 +137,11 @@ def submit_feedback(user_id: str, rating: int, comment: str, access_token: str =
         print(f"❌ Error submitting feedback: {e}")
         return False, str(e)
 
-def get_all_feedback():
+def get_all_feedback(access_token: str = None):
     """
     Fetches all feedback for the admin dashboard.
     """
-    supabase = get_supabase_client()
+    supabase = get_supabase_client(access_token)
     if not supabase: return []
     try:
         return supabase.table("feedback").select("*").order("created_at", desc=True).execute().data
