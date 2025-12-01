@@ -4,7 +4,7 @@ from langchain_core.messages import HumanMessage
 
 from db_client import log_usage
 
-def extract_data_for_chart(text: str, llm, user_id: str = None):
+def extract_data_for_chart(text: str, llm, user_id: str = None, access_token: str = None):
     """
     Extracts numerical data from text to create a chart.
     Returns a JSON object with 'title', 'labels', 'values', 'type'.
@@ -28,7 +28,7 @@ def extract_data_for_chart(text: str, llm, user_id: str = None):
         # Log Usage
         if user_id:
             usage = response.response_metadata.get('token_usage', {})
-            log_usage(user_id, "llama-3.3-70b", usage.get('prompt_tokens', 0), usage.get('completion_tokens', 0))
+            log_usage(user_id, "llama-3.3-70b", usage.get('prompt_tokens', 0), usage.get('completion_tokens', 0), access_token)
 
         content = response.content.strip()
         # Clean up potential markdown code blocks

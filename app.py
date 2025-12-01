@@ -222,7 +222,7 @@ else:
                             # Data Viz for Academic
                             from viz_tools import extract_data_for_chart, create_chart
                             with st.spinner("📊 analyzing for charts..."):
-                                chart_data = extract_data_for_chart(presentation, llm, st.session_state.user.user.id)
+                                chart_data = extract_data_for_chart(presentation, llm, st.session_state.user.user.id, access_token)
                                 fig = create_chart(chart_data)
                                 if fig:
                                     st.plotly_chart(fig, use_container_width=True)
@@ -283,7 +283,7 @@ else:
                         # Data Viz
                         with st.spinner("📊 Generating Charts..."):
                             # Pass user_id for logging
-                            chart_data = extract_data_for_chart(report, llm, st.session_state.user.user.id)
+                            chart_data = extract_data_for_chart(report, llm, st.session_state.user.user.id, access_token)
                             fig = create_chart(chart_data)
                             if fig:
                                 st.plotly_chart(fig, use_container_width=True)
@@ -341,7 +341,10 @@ else:
                 with st.chat_message("assistant"):
                     try:
                         retriever = st.session_state.vectorstore.as_retriever()
-                        system_prompt = "You are an expert analyst. Answer based on the provided context."
+                        system_prompt = (
+                            "You are an expert analyst. Answer based on the provided context.\n\n"
+                            "Context: {context}"
+                        )
                         prompt_template = ChatPromptTemplate.from_messages([
                             ("system", system_prompt),
                             ("human", "{input}"),
