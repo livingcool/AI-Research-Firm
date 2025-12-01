@@ -113,24 +113,6 @@ if not st.session_state.user:
                 st.session_state.role = get_user_role(user.user.id)
                 st.success(f"Logged in as {st.session_state.role.upper()}!")
                 st.rerun()
-            else:
-                st.error("Login failed. Check credentials.")
-                
-    with tab_signup:
-        new_email = st.text_input("New Email")
-        new_password = st.text_input("New Password", type="password")
-        if st.button("Sign Up"):
-            from db_client import sign_up
-            user = sign_up(new_email, new_password)
-            if user:
-                st.success("Account created! Please log in.")
-            else:
-                st.error("Signup failed.")
-
-else:
-    # Logged In View
-    st.sidebar.markdown("---")
-    st.sidebar.write(f"👤 **{st.session_state.user.user.email}**")
     st.sidebar.caption(f"Role: {st.session_state.role.upper()}")
     
     # Feedback Section
