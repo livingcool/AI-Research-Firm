@@ -113,6 +113,11 @@ if not st.session_state.user:
                 st.session_state.role = get_user_role(user.user.id)
                 st.success(f"Logged in as {st.session_state.role.upper()}!")
                 st.rerun()
+
+else:
+    # Logged In View
+    st.sidebar.markdown("---")
+    st.sidebar.write(f"👤 **{st.session_state.user.user.email}**")
     st.sidebar.caption(f"Role: {st.session_state.role.upper()}")
     
     # Feedback Section
