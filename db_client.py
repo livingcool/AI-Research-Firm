@@ -2,12 +2,15 @@ import os
 from supabase import create_client, Client
 from datetime import datetime
 
-def get_supabase_client():
-    url = os.getenv("SUPABASE_URL")
-    key = os.getenv("SUPABASE_KEY")
-    if not url or not key:
-        return None
-    return create_client(url, key)
+def get_supabase_client(access_token: str = None):
+    url = os.environ.get("SUPABASE_URL")
+    key = os.environ.get("SUPABASE_KEY")
+    if url and key:
+        client = create_client(url, key)
+        if access_token:
+            client.postgrest.auth(access_token)
+        return client
+    return None
 
 def sign_up(email, password):
     supabase = get_supabase_client()
@@ -115,12 +118,12 @@ def get_all_usage():
     except Exception:
         return []
 
-def submit_feedback(user_id: str, rating: int, comment: str):
+def submit_feedback(user_id: str, rating: int, comment: str, access_token: str = None):
     """
     Submits user feedback to Supabase.
     Returns (success, message).
     """
-    supabase = get_supabase_client()
+    supabase = get_supabase_client(access_token)
     if not supabase: return False, "Supabase client not initialized"
     
     try:

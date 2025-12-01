@@ -138,20 +138,11 @@ else:
         from db_client import submit_feedback
         fb_rating = st.slider("Rating", 1, 5, 5)
         fb_comment = st.text_area("Comment")
-        if st.button("Submit Feedback"):
-            success, msg = submit_feedback(st.session_state.user.user.id, fb_rating, fb_comment)
-            if success:
-                st.success(msg)
-            else:
-                st.error(f"Error: {msg}")
-
-    if st.sidebar.button("Log Out"):
-        st.session_state.user = None
-        st.session_state.role = None
-        st.rerun()
-
     if api_key:
         llm = ChatGroq(groq_api_key=api_key, model_name="llama-3.3-70b-versatile")
+        
+        # Get Token
+        access_token = st.session_state.user.session.access_token if st.session_state.user and st.session_state.user.session else None
 
         # === ADMIN DASHBOARD ===
         if st.session_state.role == 'admin':
@@ -163,7 +154,7 @@ else:
                 
                 with tab_stats:
                     # Stats
-                    usage_data = get_all_usage()
+                    usage_data = get_all_usage(access_token)
                     total_tokens = sum([u['input_tokens'] + u['output_tokens'] for u in usage_data])
                     total_cost_est = (total_tokens / 1_000_000) * 0.50 # Rough estimate
                     
@@ -176,14 +167,14 @@ else:
                     st.dataframe(usage_data)
                     
                     st.markdown("### 🗄️ Global Research History")
-                    all_reports = get_history(role='admin')
+                    all_reports = get_history(role='admin', access_token=access_token)
                     for item in all_reports:
                         with st.expander(f"[{item['type']}] {item['topic']} (User: {item.get('user_id', 'Unknown')})"):
                             st.markdown(item['content'])
                 
                 with tab_feedback:
                     st.markdown("### 💬 User Feedback")
-                    feedback_data = get_all_feedback()
+                    feedback_data = get_all_feedback(access_token)
                     if feedback_data:
                         st.dataframe(feedback_data)
                     else:
@@ -228,7 +219,7 @@ else:
                             # Log Usage
                             from db_client import log_usage
                             usage = response.response_metadata.get('token_usage', {})
-                            log_usage(st.session_state.user.user.id, "llama-3.3-70b", usage.get('prompt_tokens', 0), usage.get('completion_tokens', 0))
+                            log_usage(st.session_state.user.user.id, "llama-3.3-70b", usage.get('prompt_tokens', 0), usage.get('completion_tokens', 0), access_token)
 
                             st.markdown('<div class="card">', unsafe_allow_html=True)
                             st.markdown(presentation)
@@ -244,7 +235,7 @@ else:
 
                             # Save to DB
                             from db_client import save_report
-                            save_report(topic, "Academic", presentation, st.session_state.user.user.id)
+                            save_report(topic, "Academic", presentation, st.session_state.user.user.id, access_token)
 
                             # Export for Academic
                             from report_generator import generate_pdf, generate_docx
@@ -287,7 +278,9 @@ else:
                     if articles:
                         st.write(f"Found {len(articles)} relevant sources.")
                         # Pass user_id for logging
-                        report = generate_market_report(topic, articles, llm, st.session_state.user.user.id)
+                        # Note: We need to update market_tools to accept access_token if we want logging to work there too.
+                        # For now, let's just pass user_id and assume we'll fix market_tools next.
+                        report = generate_market_report(topic, articles, llm, st.session_state.user.user.id) 
                         
                         st.markdown('<div class="card">', unsafe_allow_html=True)
                         st.markdown(report)
@@ -303,7 +296,7 @@ else:
                         
                         # Save to DB
                         from db_client import save_report
-                        save_report(topic, "Market", report, st.session_state.user.user.id)
+                        save_report(topic, "Market", report, st.session_state.user.user.id, access_token)
                         
                         # Export
                         col1, col2 = st.columns(2)
@@ -327,8 +320,8 @@ else:
         elif mode == "Research History":
             st.subheader("🗄️ Intelligence Archives")
             from db_client import get_history
-            # Pass role to get_history
-            history = get_history(st.session_state.user.user.id, st.session_state.role)
+            # Pass role and token to get_history
+            history = get_history(st.session_state.user.user.id, st.session_state.role, access_token)
             
             if history:
                 for item in history:
