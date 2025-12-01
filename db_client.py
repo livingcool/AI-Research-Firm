@@ -114,3 +114,32 @@ def get_all_usage():
         return supabase.table("usage_logs").select("*").order("created_at", desc=True).execute().data
     except Exception:
         return []
+
+def submit_feedback(user_id: str, rating: int, comment: str):
+    """
+    Submits user feedback to Supabase.
+    """
+    supabase = get_supabase_client()
+    if not supabase: return False
+    
+    try:
+        supabase.table("feedback").insert({
+            "user_id": user_id,
+            "rating": rating,
+            "comment": comment
+        }).execute()
+        return True
+    except Exception as e:
+        print(f"❌ Error submitting feedback: {e}")
+        return False
+
+def get_all_feedback():
+    """
+    Fetches all feedback for the admin dashboard.
+    """
+    supabase = get_supabase_client()
+    if not supabase: return []
+    try:
+        return supabase.table("feedback").select("*").order("created_at", desc=True).execute().data
+    except Exception:
+        return []

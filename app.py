@@ -133,6 +133,17 @@ else:
     st.sidebar.write(f"👤 **{st.session_state.user.user.email}**")
     st.sidebar.caption(f"Role: {st.session_state.role.upper()}")
     
+    # Feedback Section
+    with st.sidebar.expander("💬 Give Feedback"):
+        from db_client import submit_feedback
+        fb_rating = st.slider("Rating", 1, 5, 5)
+        fb_comment = st.text_area("Comment")
+        if st.button("Submit Feedback"):
+            if submit_feedback(st.session_state.user.user.id, fb_rating, fb_comment):
+                st.success("Thanks for your feedback!")
+            else:
+                st.error("Error submitting feedback.")
+
     if st.sidebar.button("Log Out"):
         st.session_state.user = None
         st.session_state.role = None
@@ -145,26 +156,37 @@ else:
         if st.session_state.role == 'admin':
             if st.sidebar.checkbox("Admin Dashboard", value=False):
                 st.subheader("🛡️ Admin Dashboard")
-                from db_client import get_all_usage, get_history
+                from db_client import get_all_usage, get_history, get_all_feedback
                 
-                # Stats
-                usage_data = get_all_usage()
-                total_tokens = sum([u['input_tokens'] + u['output_tokens'] for u in usage_data])
-                total_cost_est = (total_tokens / 1_000_000) * 0.50 # Rough estimate
+                tab_stats, tab_feedback = st.tabs(["Usage Stats", "User Feedback"])
                 
-                col1, col2, col3 = st.columns(3)
-                col1.metric("Total API Calls", len(usage_data))
-                col2.metric("Total Tokens Processed", f"{total_tokens:,}")
-                col3.metric("Est. Cost (Groq)", f"${total_cost_est:.4f}")
+                with tab_stats:
+                    # Stats
+                    usage_data = get_all_usage()
+                    total_tokens = sum([u['input_tokens'] + u['output_tokens'] for u in usage_data])
+                    total_cost_est = (total_tokens / 1_000_000) * 0.50 # Rough estimate
+                    
+                    col1, col2, col3 = st.columns(3)
+                    col1.metric("Total API Calls", len(usage_data))
+                    col2.metric("Total Tokens Processed", f"{total_tokens:,}")
+                    col3.metric("Est. Cost (Groq)", f"${total_cost_est:.4f}")
+                    
+                    st.markdown("### 📋 Recent Activity Log")
+                    st.dataframe(usage_data)
+                    
+                    st.markdown("### 🗄️ Global Research History")
+                    all_reports = get_history(role='admin')
+                    for item in all_reports:
+                        with st.expander(f"[{item['type']}] {item['topic']} (User: {item.get('user_id', 'Unknown')})"):
+                            st.markdown(item['content'])
                 
-                st.markdown("### 📋 Recent Activity Log")
-                st.dataframe(usage_data)
-                
-                st.markdown("### 🗄️ Global Research History")
-                all_reports = get_history(role='admin')
-                for item in all_reports:
-                    with st.expander(f"[{item['type']}] {item['topic']} (User: {item.get('user_id', 'Unknown')})"):
-                        st.markdown(item['content'])
+                with tab_feedback:
+                    st.markdown("### 💬 User Feedback")
+                    feedback_data = get_all_feedback()
+                    if feedback_data:
+                        st.dataframe(feedback_data)
+                    else:
+                        st.info("No feedback yet.")
                 
                 st.stop() # Stop execution here if in Admin Mode
 
@@ -196,7 +218,8 @@ else:
                         with st.spinner("💡 Generating Presentation..."):
                             presentation_prompt = (
                                 f"Create a structured presentation summary:\n\n{md_text[:10000]}\n\n"
-                                "Format as:\n# [Title]\n## Key Findings\n- [Point]\n## Methodology\n- [Point]\n## Conclusion\n- [Point]"
+                                "Format as:\n# [Title]\n## Key Findings\n- [Point]\n## Methodology\n- [Point]\n## Conclusion\n- [Point]\n\n"
+                                "IMPORTANT: Include any specific statistics, numbers, or data points found in the text."
                             )
                             response = llm.invoke(presentation_prompt)
                             presentation = response.content
@@ -210,9 +233,29 @@ else:
                             st.markdown(presentation)
                             st.markdown('</div>', unsafe_allow_html=True)
                             
+                            # Data Viz for Academic
+                            from viz_tools import extract_data_for_chart, create_chart
+                            with st.spinner("📊 analyzing for charts..."):
+                                chart_data = extract_data_for_chart(presentation, llm, st.session_state.user.user.id)
+                                fig = create_chart(chart_data)
+                                if fig:
+                                    st.plotly_chart(fig, use_container_width=True)
+
                             # Save to DB
                             from db_client import save_report
                             save_report(topic, "Academic", presentation, st.session_state.user.user.id)
+
+                            # Export for Academic
+                            from report_generator import generate_pdf, generate_docx
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                pdf_path = generate_pdf(presentation)
+                                with open(pdf_path, "rb") as f:
+                                    st.download_button("📥 Download PDF", f, file_name=f"{topic}_academic.pdf")
+                            with col2:
+                                docx_path = generate_docx(presentation)
+                                with open(docx_path, "rb") as f:
+                                    st.download_button("📝 Download Word", f, file_name=f"{topic}_academic.docx")
 
                         # Visuals
                         st.subheader("📊 Extracted Visuals")
