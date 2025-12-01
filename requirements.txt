@@ -16,3 +16,5 @@ sentence-transformers
 langchain-text-splitters
 streamlit
 langchain-groq
+fpdf
+python-docx

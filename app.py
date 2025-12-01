@@ -78,6 +78,8 @@ if "vectorstore" not in st.session_state:
     st.session_state.vectorstore = None
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "user" not in st.session_state:
+    st.session_state.user = None
 
 # --- Helper Functions ---
 def process_pdf(uploaded_file):
@@ -96,134 +98,199 @@ def process_pdf(uploaded_file):
             os.remove(tmp_path)
 
 # --- Main Logic ---
-if api_key:
-    llm = ChatGroq(groq_api_key=api_key, model_name="llama-3.3-70b-versatile")
+if not st.session_state.user:
+    st.markdown('<div class="card"><h3>🔐 Login Required</h3><p>Please log in to access the Autonomous Research Firm.</p></div>', unsafe_allow_html=True)
+    tab_login, tab_signup = st.tabs(["Login", "Sign Up"])
+    
+    with tab_login:
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
+        if st.button("Log In"):
+            from db_client import sign_in
+            user = sign_in(email, password)
+            if user:
+                st.session_state.user = user
+                st.success("Logged in!")
+                st.rerun()
+            else:
+                st.error("Login failed. Check credentials.")
+                
+    with tab_signup:
+        new_email = st.text_input("New Email")
+        new_password = st.text_input("New Password", type="password")
+        if st.button("Sign Up"):
+            from db_client import sign_up
+            user = sign_up(new_email, new_password)
+            if user:
+                st.success("Account created! Please log in.")
+            else:
+                st.error("Signup failed.")
 
-    # === MODE 1: ACADEMIC RESEARCH ===
-    if mode == "Academic Research (PDF/ArXiv)":
-        st.subheader("📚 Academic Deep Dive")
-        
-        tab1, tab2 = st.tabs(["Upload PDF", "Search ArXiv"])
-        
-        with tab1:
-            uploaded_file = st.file_uploader("Upload Research Paper", type="pdf")
-            if uploaded_file and st.button("Analyze PDF"):
-                st.session_state.vectorstore = process_pdf(uploaded_file)
-                st.success("Brain Built! Ready for Q&A.")
+else:
+    # Logged In View
+    st.sidebar.markdown("---")
+    st.sidebar.write(f"👤 **{st.session_state.user.user.email}**")
+    if st.sidebar.button("Log Out"):
+        st.session_state.user = None
+        st.rerun()
 
-        with tab2:
-            from research_tools import search_arxiv, select_best_paper, fetch_and_parse_rich_arxiv
-            topic = st.text_input("Enter Research Topic:")
-            if st.button("Start Autonomous Research"):
-                with st.spinner("🔍 Searching & Analyzing..."):
-                    papers = search_arxiv(topic)
-                    best_paper = select_best_paper(topic, papers, llm)
-                    
-                    st.markdown(f"### 🏆 Selected: {best_paper['title']}")
-                    
-                    md_text, image_dir = fetch_and_parse_rich_arxiv(best_paper['id'])
-                    
-                    # Presentation
-                    with st.spinner("💡 Generating Presentation..."):
-                        presentation_prompt = (
-                            f"Create a structured presentation summary:\n\n{md_text[:10000]}\n\n"
-                            "Format as:\n# [Title]\n## Key Findings\n- [Point]\n## Methodology\n- [Point]\n## Conclusion\n- [Point]"
-                        )
-                        presentation = llm.invoke(presentation_prompt).content
+    if api_key:
+        llm = ChatGroq(groq_api_key=api_key, model_name="llama-3.3-70b-versatile")
+
+        # === MODE 1: ACADEMIC RESEARCH ===
+        if mode == "Academic Research (PDF/ArXiv)":
+            st.subheader("📚 Academic Deep Dive")
+            
+            tab1, tab2 = st.tabs(["Upload PDF", "Search ArXiv"])
+            
+            with tab1:
+                uploaded_file = st.file_uploader("Upload Research Paper", type="pdf")
+                if uploaded_file and st.button("Analyze PDF"):
+                    st.session_state.vectorstore = process_pdf(uploaded_file)
+                    st.success("Brain Built! Ready for Q&A.")
+
+            with tab2:
+                from research_tools import search_arxiv, select_best_paper, fetch_and_parse_rich_arxiv
+                topic = st.text_input("Enter Research Topic:")
+                if st.button("Start Autonomous Research"):
+                    with st.spinner("🔍 Searching & Analyzing..."):
+                        papers = search_arxiv(topic)
+                        best_paper = select_best_paper(topic, papers, llm)
+                        
+                        st.markdown(f"### 🏆 Selected: {best_paper['title']}")
+                        
+                        md_text, image_dir = fetch_and_parse_rich_arxiv(best_paper['id'])
+                        
+                        # Presentation
+                        with st.spinner("💡 Generating Presentation..."):
+                            presentation_prompt = (
+                                f"Create a structured presentation summary:\n\n{md_text[:10000]}\n\n"
+                                "Format as:\n# [Title]\n## Key Findings\n- [Point]\n## Methodology\n- [Point]\n## Conclusion\n- [Point]"
+                            )
+                            response = llm.invoke(presentation_prompt)
+                            presentation = response.content
+                            
+                            # Log Usage
+                            from db_client import log_usage
+                            usage = response.response_metadata.get('token_usage', {})
+                            log_usage(st.session_state.user.user.id, "llama-3.3-70b", usage.get('prompt_tokens', 0), usage.get('completion_tokens', 0))
+
+                            st.markdown('<div class="card">', unsafe_allow_html=True)
+                            st.markdown(presentation)
+                            st.markdown('</div>', unsafe_allow_html=True)
+                            
+                            # Save to DB
+                            from db_client import save_report
+                            save_report(topic, "Academic", presentation, st.session_state.user.user.id)
+
+                        # Visuals
+                        st.subheader("📊 Extracted Visuals")
+                        if os.path.exists(image_dir):
+                            images = [f for f in os.listdir(image_dir) if f.endswith(".png")]
+                            if images:
+                                cols = st.columns(3)
+                                for i, img_file in enumerate(images):
+                                    with cols[i % 3]:
+                                        st.image(os.path.join(image_dir, img_file), caption=img_file, use_container_width=True)
+                        
+                        # Build Brain
+                        from rag_engine import build_vector_store
+                        st.session_state.vectorstore = build_vector_store(md_text)
+                        st.success("Brain Built! Ready for Q&A.")
+
+        # === MODE 2: MARKET INTELLIGENCE ===
+        elif mode == "Market Intelligence (Web)":
+            st.subheader("🌐 Real-Time Market Analysis")
+            from market_tools import search_market, generate_market_report
+            from viz_tools import extract_data_for_chart, create_chart
+            from report_generator import generate_pdf, generate_docx
+            
+            topic = st.text_input("Enter Market/Industry:")
+            if st.button("Generate Intelligence Report"):
+                with st.spinner("🕵️‍♂️ Scouting the Web..."):
+                    articles = search_market(topic)
+                    if articles:
+                        st.write(f"Found {len(articles)} relevant sources.")
+                        # Pass user_id for logging
+                        report = generate_market_report(topic, articles, llm, st.session_state.user.user.id)
+                        
                         st.markdown('<div class="card">', unsafe_allow_html=True)
-                        st.markdown(presentation)
+                        st.markdown(report)
                         st.markdown('</div>', unsafe_allow_html=True)
+                        
+                        # Data Viz
+                        with st.spinner("📊 Generating Charts..."):
+                            # Pass user_id for logging
+                            chart_data = extract_data_for_chart(report, llm, st.session_state.user.user.id)
+                            fig = create_chart(chart_data)
+                            if fig:
+                                st.plotly_chart(fig, use_container_width=True)
                         
                         # Save to DB
                         from db_client import save_report
-                        save_report(topic, "Academic", presentation)
+                        save_report(topic, "Market", report, st.session_state.user.user.id)
+                        
+                        # Export
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            pdf_path = generate_pdf(report)
+                            with open(pdf_path, "rb") as f:
+                                st.download_button("📥 Download PDF", f, file_name=f"{topic}_report.pdf")
+                        with col2:
+                            docx_path = generate_docx(report)
+                            with open(docx_path, "rb") as f:
+                                st.download_button("📝 Download Word", f, file_name=f"{topic}_report.docx")
 
-                    # Visuals
-                    st.subheader("📊 Extracted Visuals")
-                    if os.path.exists(image_dir):
-                        images = [f for f in os.listdir(image_dir) if f.endswith(".png")]
-                        if images:
-                            cols = st.columns(3)
-                            for i, img_file in enumerate(images):
-                                with cols[i % 3]:
-                                    st.image(os.path.join(image_dir, img_file), caption=img_file, use_container_width=True)
-                    
-                    # Build Brain
-                    from rag_engine import build_vector_store
-                    st.session_state.vectorstore = build_vector_store(md_text)
-                    st.success("Brain Built! Ready for Q&A.")
+                        # Enable Chat on this report
+                        from rag_engine import build_vector_store
+                        st.session_state.vectorstore = build_vector_store(report)
+                        st.success("Context Loaded! Ask questions about the report.")
+                    else:
+                        st.error("No articles found.")
 
-    # === MODE 2: MARKET INTELLIGENCE ===
-    elif mode == "Market Intelligence (Web)":
-        st.subheader("🌐 Real-Time Market Analysis")
-        from market_tools import search_market, generate_market_report
-        
-        topic = st.text_input("Enter Market/Industry:")
-        if st.button("Generate Intelligence Report"):
-            with st.spinner("🕵️‍♂️ Scouting the Web..."):
-                articles = search_market(topic)
-                if articles:
-                    st.write(f"Found {len(articles)} relevant sources.")
-                    report = generate_market_report(topic, articles, llm)
-                    
-                    st.markdown('<div class="card">', unsafe_allow_html=True)
-                    st.markdown(report)
-                    st.markdown('</div>', unsafe_allow_html=True)
-                    
-                    # Save to DB
-                    from db_client import save_report
-                    save_report(topic, "Market", report)
-                    
-                    # Enable Chat on this report
-                    from rag_engine import build_vector_store
-                    st.session_state.vectorstore = build_vector_store(report)
-                    st.success("Context Loaded! Ask questions about the report.")
-                else:
-                    st.error("No articles found.")
+        # === MODE 3: HISTORY ===
+        elif mode == "Research History":
+            st.subheader("🗄️ Intelligence Archives")
+            from db_client import get_history
+            history = get_history(st.session_state.user.user.id)
+            
+            if history:
+                for item in history:
+                    with st.expander(f"{item['created_at'][:10]} - {item['type']}: {item['topic']}"):
+                        st.markdown(item['content'])
+            else:
+                st.info("No saved reports found.")
 
-    # === MODE 3: HISTORY ===
-    elif mode == "Research History":
-        st.subheader("🗄️ Intelligence Archives")
-        from db_client import get_history
-        history = get_history()
-        
-        if history:
-            for item in history:
-                with st.expander(f"{item['created_at'][:10]} - {item['type']}: {item['topic']}"):
-                    st.markdown(item['content'])
-        else:
-            st.info("No saved reports found.")
+        # === CHAT INTERFACE (Global) ===
+        if st.session_state.vectorstore:
+            st.markdown("---")
+            st.subheader("💬 Analyst Chat")
+            
+            for message in st.session_state.messages:
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
 
-    # === CHAT INTERFACE (Global) ===
-    if st.session_state.vectorstore:
-        st.markdown("---")
-        st.subheader("💬 Analyst Chat")
-        
-        for message in st.session_state.messages:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
+            if prompt := st.chat_input("Ask follow-up questions..."):
+                st.session_state.messages.append({"role": "user", "content": prompt})
+                with st.chat_message("user"):
+                    st.markdown(prompt)
 
-        if prompt := st.chat_input("Ask follow-up questions..."):
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.markdown(prompt)
+                with st.chat_message("assistant"):
+                    try:
+                        retriever = st.session_state.vectorstore.as_retriever()
+                        system_prompt = "You are an expert analyst. Answer based on the provided context."
+                        prompt_template = ChatPromptTemplate.from_messages([
+                            ("system", system_prompt),
+                            ("human", "{input}"),
+                        ])
+                        chain = create_stuff_documents_chain(llm, prompt_template)
+                        rag_chain = create_retrieval_chain(retriever, chain)
+                        
+                        response = rag_chain.invoke({"input": prompt})
+                        st.markdown(response["answer"])
+                        st.session_state.messages.append({"role": "assistant", "content": response["answer"]})
+                    except Exception as e:
+                        st.error(f"Error: {e}")
 
-            with st.chat_message("assistant"):
-                try:
-                    retriever = st.session_state.vectorstore.as_retriever()
-                    system_prompt = "You are an expert analyst. Answer based on the provided context."
-                    prompt_template = ChatPromptTemplate.from_messages([
-                        ("system", system_prompt),
-                        ("human", "{input}"),
-                    ])
-                    chain = create_stuff_documents_chain(llm, prompt_template)
-                    rag_chain = create_retrieval_chain(retriever, chain)
-                    
-                    response = rag_chain.invoke({"input": prompt})
-                    st.markdown(response["answer"])
-                    st.session_state.messages.append({"role": "assistant", "content": response["answer"]})
-                except Exception as e:
-                    st.error(f"Error: {e}")
-
-else:
-    st.info("👈 Please enter your Groq API Key to start.")
+    else:
+        st.info("👈 Please enter your Groq API Key to start.")

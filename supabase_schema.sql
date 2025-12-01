@@ -5,7 +5,17 @@ create table if not exists research_reports (
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   topic text not null,
   type text not null, -- 'Academic' or 'Market'
-  content text not null
+  content text not null,
+  user_id uuid references auth.users
+);
+
+create table if not exists usage_logs (
+  id bigint primary key generated always as identity,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  user_id uuid references auth.users not null,
+  model text not null,
+  input_tokens int not null,
+  output_tokens int not null
 );
 
 -- Optional: Enable Row Level Security (RLS) if you want to restrict access

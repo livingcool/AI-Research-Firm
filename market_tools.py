@@ -2,8 +2,8 @@ import os
 from duckduckgo_search import DDGS
 import newspaper
 from langchain_core.messages import HumanMessage
-
 import time
+from db_client import log_usage
 
 def search_market(topic: str, max_results: int = 5):
     """
@@ -62,7 +62,7 @@ def get_article_content(url: str):
         print(f"⚠️ Error fetching {url}: {e}")
         return None
 
-def generate_market_report(topic: str, articles: list, llm):
+def generate_market_report(topic: str, articles: list, llm, user_id: str = None):
     """
     Generates a strategic market report based on the fetched articles.
     """
@@ -93,4 +93,10 @@ def generate_market_report(topic: str, articles: list, llm):
     )
     
     response = llm.invoke([HumanMessage(content=prompt)])
+    
+    # Log Usage
+    if user_id:
+        usage = response.response_metadata.get('token_usage', {})
+        log_usage(user_id, "llama-3.3-70b", usage.get('prompt_tokens', 0), usage.get('completion_tokens', 0))
+        
     return response.content
