@@ -114,6 +114,17 @@ if not st.session_state.user:
                 st.success(f"Logged in as {st.session_state.role.upper()}!")
                 st.rerun()
 
+    with tab_signup:
+        new_email = st.text_input("New Email")
+        new_password = st.text_input("New Password", type="password")
+        if st.button("Create Account"):
+            from db_client import sign_up
+            user = sign_up(new_email, new_password)
+            if user:
+                st.success("Account created! Please log in.")
+            else:
+                st.error("Sign up failed. Email might be taken.")
+
 else:
     # Logged In View
     st.sidebar.markdown("---")
