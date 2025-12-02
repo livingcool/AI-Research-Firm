@@ -18,7 +18,7 @@ This project leverages Large Language Models (LLMs) to transform hours of manual
 2.  **Market Intelligence Mode**:
     *   **Real-Time Web Search**: Scours the web for the latest news and articles on any industry or topic.
     *   **Strategic Reports**: Generates Executive Summaries, SWOT Analyses, and Competitor breakdowns.
-    *   **Source Citations**: transparently links to original articles.
+    *   **Source Citations**: Transparently links to original articles.
 
 ### 📊 Dynamic Data Visualization
 *   **Auto-Charting**: The AI identifies numerical data within text (e.g., market share, growth rates) and automatically generates interactive **Plotly charts**.
@@ -36,15 +36,64 @@ This project leverages Large Language Models (LLMs) to transform hours of manual
 
 ---
 
-## 🛠️ Tech Stack
+## 🛠️ Tech Stack Deep Dive
 
-*   **Frontend**: [Streamlit](https://streamlit.io/) (Python-based UI)
-*   **LLM Orchestration**: [LangChain](https://www.langchain.com/)
-*   **Model**: Llama 3.3 70B (via [Groq](https://groq.com/) API for blazing speed)
-*   **Database & Auth**: [Supabase](https://supabase.com/) (PostgreSQL + Auth)
-*   **Vector Store**: FAISS (Local) / Supabase Vector (Optional)
-*   **Visualization**: Plotly
-*   **Tools**: `pymupdf4llm` (PDF parsing), `duckduckgo-search` (Web search), `newspaper3k` (Article scraping)
+Here is a detailed breakdown of every technology used in this project, explaining **Where** it lives, **How** it works, and **Why** we chose it.
+
+### 1. Streamlit (Frontend & UI)
+*   **Where**: `app.py` (The entire user interface).
+*   **How**: We used `st.set_page_config` for layout, `st.sidebar` for navigation, `st.tabs` for organizing modes, and `st.markdown` with custom HTML/CSS for the "Premium" dark-mode aesthetic.
+*   **Why**: It allows for rapid development of data-driven web apps using pure Python. It handles the frontend-backend connection seamlessly, making it perfect for AI prototypes that need rich interactivity (charts, inputs) without writing React/Vue.
+
+### 2. LangChain (Orchestration)
+*   **Where**: `app.py`, `research_tools.py`, `market_tools.py`, `viz_tools.py`.
+*   **How**: We used `ChatPromptTemplate` to structure instructions for the AI and `create_stuff_documents_chain` to feed retrieved context (RAG) into the model. It manages the flow of data between the user, the database, and the LLM.
+*   **Why**: It provides a standard abstraction layer for working with LLMs. It makes it easy to swap models, manage prompt templates, and build complex "chains" (like RAG) that would be messy to write from scratch.
+
+### 3. Llama 3.3 70B via Groq (Intelligence)
+*   **Where**: Instantiated in `app.py` and passed to all tool functions.
+*   **How**: Accessed via `ChatGroq` class. We send prompts (e.g., "Analyze this PDF") and receive structured text responses.
+*   **Why**:
+    *   **Llama 3.3**: A state-of-the-art open-source model with excellent reasoning capabilities, comparable to GPT-4.
+    *   **Groq**: An LPU (Language Processing Unit) inference engine that is **blazing fast**. This speed is critical for maintaining a "real-time" feel when generating long reports.
+
+### 4. Supabase (Database & Auth)
+*   **Where**: `db_client.py`, `supabase_schema.sql`.
+*   **How**:
+    *   **Auth**: Handles user signup/login (`supabase.auth`).
+    *   **Database**: Stores user profiles, research reports, usage logs, and feedback in PostgreSQL tables.
+    *   **RLS**: We wrote SQL policies to ensure users can only see their own data, while Admins can see everything.
+*   **Why**: It's an open-source Firebase alternative that gives us a full backend suite: Authentication, a robust PostgreSQL database, and Vector storage (optional) in one platform.
+
+### 5. Plotly (Visualization)
+*   **Where**: `viz_tools.py`, `app.py`.
+*   **How**: The LLM extracts data into JSON format (e.g., `{"labels": ["A", "B"], "values": [10, 20]}`). We then pass this JSON to `plotly.graph_objects` to render Bar, Pie, or Line charts.
+*   **Why**: Unlike static images (Matplotlib), Plotly charts are interactive. Users can hover over data points, zoom in, and toggle series, providing a much more professional user experience.
+
+### 6. FAISS & HuggingFace (RAG Engine)
+*   **Where**: `rag_engine.py`, `app.py`.
+*   **How**: We use `HuggingFaceEmbeddings` to turn text into numbers (vectors) and `FAISS` to index them. When you ask a question, we find the most similar text chunks to send to the LLM.
+*   **Why**: FAISS is a highly efficient library for similarity search. It allows the AI to "read" a 50-page PDF and answer specific questions by only retrieving the relevant pages.
+
+### 7. DuckDuckGo Search (Web Search)
+*   **Where**: `market_tools.py`.
+*   **How**: We use `DDGS().text()` to programmatically search the web for a given topic and retrieve a list of URLs and snippets.
+*   **Why**: It provides a free, privacy-focused API for web search results, allowing our "Market Intelligence" mode to access real-time information without an expensive Google Search API subscription.
+
+### 8. Newspaper3k (Article Scraping)
+*   **Where**: `market_tools.py`.
+*   **How**: We pass a URL to `Article(url)`, then call `.download()` and `.parse()` to strip away ads, sidebars, and HTML clutter, leaving only the main article text.
+*   **Why**: Web pages are messy. Newspaper3k is a battle-tested library for extracting clean text from news sites, ensuring the LLM doesn't get confused by website navigation or ads.
+
+### 9. PyMuPDF4LLM (PDF Parsing)
+*   **Where**: `app.py` (`process_pdf` function).
+*   **How**: `pymupdf4llm.to_markdown(file_path)` converts the PDF content into Markdown format.
+*   **Why**: Standard PDF text extraction often loses structure (headers, lists). This tool preserves the layout as Markdown, which LLMs understand perfectly, leading to much better summaries.
+
+### 10. FPDF & Python-Docx (Export)
+*   **Where**: `report_generator.py`.
+*   **How**: We programmatically build PDF and Word documents string-by-string, adding headers and formatting.
+*   **Why**: Business users need offline copies. These libraries allow us to generate professional-looking files that users can download and share with stakeholders.
 
 ---
 
